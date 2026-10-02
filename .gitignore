@@ -1,0 +1,40 @@
+# Environment files & Secrets (never commit secrets)
+.env
+.env.*
+*.env
+!.env.example
+nexus-node_firebase.json
+*firebase*.json
+*serviceAccountKey*.json
+
+
+# Dependencies
+node_modules/
+*/node_modules/
+*/*/node_modules/
+
+# Production builds
+dist/
+dist-ssr/
+build/
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# Editor & OS files
+.vscode/
+!.vscode/extensions.json
+.idea/
+.DS_Store
+Thumbs.db
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
