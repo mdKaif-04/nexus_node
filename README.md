@@ -26,52 +26,60 @@ The system is decoupled into an **API Gateway**, independent **Domain Microservi
 
 ```mermaid
 flowchart TD
-    subgraph Client ["Client Layer"]
-        UI["React 19 + Vite Frontend<br/>(Tailwind v4, Redux Toolkit)"]
+    subgraph Client [Client Layer]
+        UI["React 19 + Vite Frontend"]
     end
 
-    subgraph Ingress ["API Gateway :8000"]
-        GW["Express Gateway & Proxy"]
-        AuthMiddleware["protect Middleware<br/>(Redis Session Check)"]
-        HeaderEnricher["proxyWithHeader<br/>(Injects x-user-id)"]
+    subgraph Gateway [API Gateway]
+        GW["Express Gateway"]
+        AuthMiddleware["protect Middleware"]
+        HeaderEnricher["proxyWithHeader"]
     end
 
-    subgraph CacheStore ["Cache & Session Layer"]
-        Redis[("Redis 6379<br/>(Distributed Session Store)")]
+    subgraph DataLayer [Data & Storage Layer]
+        Redis[("Redis Session Store")]
+        MongoUsers[("MongoDB: Users")]
+        MongoChats[("MongoDB: Chats & Messages")]
     end
 
-    subgraph Services ["Backend Microservices"]
-        AuthService["Auth Service :8001<br/>- Firebase Admin SDK<br/>- User Schema (MongoDB)<br/>- 7-Day Session Gen"]
-        ChatService["Chat Service :8002<br/>- Conversation Management<br/>- Message History (MongoDB)"]
-        AgentService["Agent Service :8003<br/>- LangGraph Routing Graph<br/>- Specialized Agents"]
+    subgraph Services [Backend Microservices]
+        AuthService["Auth Service"]
+        ChatService["Chat Service"]
+        AgentService["Agent Service"]
     end
 
-    subgraph MultiAgentEngine ["LangGraph Multi-Agent Graph"]
-        Router{"Graph Router<br/>(Intent Classification)"}
+    subgraph AgentGraph [LangGraph Multi-Agent Engine]
+        StateDef["agentState Root Annotation"]
+        Router{"Graph Router"}
         ChatAgent["Chat Agent"]
         CodingAgent["Coding Agent"]
         ImageAgent["Image Gen Agent"]
-        PDFAgent["PDF Analysis Agent"]
+        PDFAgent["PDF Agent"]
         PPTAgent["PPT Agent"]
         SearchAgent["Search Agent"]
     end
 
-    UI -->|"HTTP / REST (Cookies)"| GW
-    GW -->|"Session Lookup"| Redis
-    GW -->|"/api/auth/*"| AuthService
-    GW -->|"/api/chat/*"| AuthMiddleware --> HeaderEnricher --> ChatService
-    GW -->|"/api/agent/*"| AuthMiddleware --> AgentService
+    UI -->|REST with Cookies| GW
+    GW -->|Session Check| Redis
+    GW -->|/api/auth| AuthService
+    GW -->|/api/chat| AuthMiddleware
+    GW -->|/api/agent| AuthMiddleware
 
-    AuthService -.->|"Save User"| MongoUsers[("MongoDB: Users")]
-    ChatService -.->|"Persist History"| MongoChats[("MongoDB: Chats & Messages")]
+    AuthMiddleware --> HeaderEnricher
+    HeaderEnricher -->|Forward Request| ChatService
+    AuthMiddleware -->|Forward Request| AgentService
 
-    AgentService --> Router
-    Router --> ChatAgent
-    Router --> CodingAgent
-    Router --> ImageAgent
-    Router --> PDFAgent
-    Router --> PPTAgent
-    Router --> SearchAgent
+    AuthService -->|User Sync| MongoUsers
+    ChatService -->|Persist History| MongoChats
+
+    AgentService --> StateDef
+    StateDef --> Router
+    Router -->|chat| ChatAgent
+    Router -->|coding| CodingAgent
+    Router -->|imageGen| ImageAgent
+    Router -->|pdf| PDFAgent
+    Router -->|ppt| PPTAgent
+    Router -->|search| SearchAgent
 ```
 
 ---
@@ -99,6 +107,8 @@ Here is an exact, deep-dive summary of what is built and operating today versus 
 
 ### 4. Agent Service (`/backend/services/agent`)
 - [x] **LangGraph Foundation**: Configured with `@langchain/langgraph` and `@langchain/core`.
+- [x] **Agent State Management**: Implemented `agentState` root annotation (`prompt`, `aiResponse`, `agent`) in `graph/state.js`.
+- [x] **StateGraph & Dynamic Routing**: Assembled `StateGraph(agentState)` with conditional edges routing prompts across all 6 specialized agents in `graph/graph.js`.
 - [x] **Agent Scaffolding**: Modular directory structure housing individual agent handlers:
   - 💬 **Chat Agent**: Conversational exchanges and dialogue management.
   - 💻 **Coding Agent**: Code writing, reviewing, and explanation workflows.
@@ -106,7 +116,6 @@ Here is an exact, deep-dive summary of what is built and operating today versus 
   - 📄 **PDF Agent**: Document parsing, context retrieval, and question-answering.
   - 📊 **PPT Agent**: Presentation outlining and slide data structuring.
   - 🔍 **Search Agent**: Web search routing and retrieval-augmented context.
-- [ ] **LangGraph StateGraph Execution**: *In active implementation* (conditional edge routing & graph compilation).
 
 ### 5. Frontend Client (`/frontend`)
 - [x] **Stack**: React 19, Vite, Tailwind CSS v4.
@@ -219,7 +228,8 @@ Open `http://localhost:5173` in your browser to access the application workspace
 
 ## 🗺️ Roadmap & Future Architecture
 
-- [ ] **LangGraph Routing**: Compile conditional routing logic inside `backend/services/agent/graph/router.js` to dispatch queries based on intent detection.
+- [x] **LangGraph StateGraph & Routing**: Conditional edge routing architecture in `graph/graph.js` and state schema in `graph/state.js`.
+- [ ] **Agent Execution & Model Providers**: Wire LLM invocation into individual agent nodes and implement classification logic in `router.js`.
 - [ ] **Streaming Responses (SSE / WebSockets)**: Enable token-by-token streaming from individual agent models back to the client interface.
 - [ ] **Multi-Agent Memory**: Implement LangGraph checkpointers backed by Redis/MongoDB for cross-turn contextual memory.
 - [ ] **Document & Vector Ingestion**: RAG pipeline for the `pdf.agent.js` and `search.agent.js` using vector embeddings.
