@@ -6,7 +6,9 @@
 [![Express](https://img.shields.io/badge/Express-5.x-black?style=flat&logo=express&logoColor=white)](https://expressjs.com/)
 [![React](https://img.shields.io/badge/React-19-61DAFB?style=flat&logo=react&logoColor=black)](https://react.dev/)
 [![Tailwind CSS](https://img.shields.io/badge/TailwindCSS-v4-38B2AC?style=flat&logo=tailwind-css&logoColor=white)](https://tailwindcss.com/)
-[![LangChain](https://img.shields.io/badge/LangGraph-Agentic%20Orchestration-1C3C3C?style=flat&logo=langchain&logoColor=white)](https://www.langchain.com/langgraph)
+[![LangGraph](https://img.shields.io/badge/LangGraph-Agentic%20Orchestration-1C3C3C?style=flat&logo=langchain&logoColor=white)](https://www.langchain.com/langgraph)
+[![Groq](https://img.shields.io/badge/Groq-Fast%20Inference-F05A28?style=flat&logo=groq&logoColor=white)](https://groq.com/)
+[![Gemini](https://img.shields.io/badge/Google%20Gemini-2.5%20Flash-4285F4?style=flat&logo=google&logoColor=white)](https://ai.google.dev/)
 [![Redis](https://img.shields.io/badge/Redis-Session%20Store-DC382D?style=flat&logo=redis&logoColor=white)](https://redis.io/)
 [![MongoDB](https://img.shields.io/badge/MongoDB-Persistence-47A248?style=flat&logo=mongodb&logoColor=white)](https://www.mongodb.com/)
 [![Firebase](https://img.shields.io/badge/Firebase-Authentication-FFCA28?style=flat&logo=firebase&logoColor=black)](https://firebase.google.com/)
@@ -16,9 +18,9 @@
 
 ## 📌 Overview
 
-**Nexus Node** is a scalable, microservices-based AI platform that routes user inquiries to dedicated, specialized AI agents using a dynamic graph routing engine. Rather than relying on a single monolithic language model, Nexus Node distributes domain-specific tasks (general conversation, code synthesis, visual generation, document analysis, presentation building, and web search) across isolated agent nodes.
+**Nexus Node** is a scalable, microservices-based AI platform that routes user inquiries to dedicated, specialized AI agents using a dynamic graph routing engine. Rather than relying on a single monolithic language model, Nexus Node distributes domain-specific tasks (general conversation, code synthesis, visual generation, document analysis, presentation building, and web search) across isolated agent nodes powered by tailored LLM providers (Groq and Google Gemini).
 
-The system is decoupled into an **API Gateway**, independent **Domain Microservices**, a **LangGraph Agent Engine**, and a reactive **Vite + React 19 Frontend**.
+The system is decoupled into an **API Gateway**, independent **Domain Microservices**, a **LangGraph Multi-Agent Engine**, and a reactive **Vite + React 19 Frontend**.
 
 ---
 
@@ -48,15 +50,25 @@ flowchart TD
         AgentService["Agent Service"]
     end
 
+    subgraph AgentPipeline [Agent Execution & Persistence]
+        AgentCtrl["Agent Controller"]
+        SaveUserMsg["Sync Prompt to Chat Service"]
+    end
+
+    subgraph ModelLayer [LLM Provider Layer]
+        GroqLLM["Groq: gpt-oss-120b"]
+        GeminiLLM["Google GenAI: gemini-2.5-flash"]
+    end
+
     subgraph AgentGraph [LangGraph Multi-Agent Engine]
-        StateDef["agentState Root Annotation"]
-        Router{"Graph Router"}
+        Router{"Intent Router"}
         ChatAgent["Chat Agent"]
         CodingAgent["Coding Agent"]
         ImageAgent["Image Gen Agent"]
         PDFAgent["PDF Agent"]
         PPTAgent["PPT Agent"]
         SearchAgent["Search Agent"]
+        GraphEnd(["Graph End"])
     end
 
     UI -->|REST with Cookies| GW
@@ -67,19 +79,33 @@ flowchart TD
 
     AuthMiddleware --> HeaderEnricher
     HeaderEnricher -->|Forward Request| ChatService
-    AuthMiddleware -->|Forward Request| AgentService
+    AuthMiddleware -->|POST /chat| AgentService
 
     AuthService -->|User Sync| MongoUsers
     ChatService -->|Persist History| MongoChats
 
-    AgentService --> StateDef
-    StateDef --> Router
+    AgentService --> AgentCtrl
+    AgentCtrl -->|save-message| SaveUserMsg
+    SaveUserMsg -.->|HTTP POST| ChatService
+    AgentCtrl -->|graph.invoke| Router
+
     Router -->|chat| ChatAgent
+    Router -->|search| SearchAgent
     Router -->|coding| CodingAgent
     Router -->|imageGen| ImageAgent
     Router -->|pdf| PDFAgent
     Router -->|ppt| PPTAgent
-    Router -->|search| SearchAgent
+
+    Router -.->|LLM Intent Classification| GroqLLM
+    ChatAgent -.->|Inference| GroqLLM
+    CodingAgent -.->|Inference| GeminiLLM
+
+    SearchAgent -->|Context Synthesis| ChatAgent
+    ChatAgent --> GraphEnd
+    CodingAgent --> GraphEnd
+    ImageAgent --> GraphEnd
+    PDFAgent --> GraphEnd
+    PPTAgent --> GraphEnd
 ```
 
 ---
@@ -106,16 +132,22 @@ Here is an exact, deep-dive summary of what is built and operating today versus 
 - [x] **Chronological Retrieval**: Fetching message history sorted by creation timestamps.
 
 ### 4. Agent Service (`/backend/services/agent`)
-- [x] **LangGraph Foundation**: Configured with `@langchain/langgraph` and `@langchain/core`.
-- [x] **Agent State Management**: Implemented `agentState` root annotation (`prompt`, `aiResponse`, `agent`) in `graph/state.js`.
-- [x] **StateGraph & Dynamic Routing**: Assembled `StateGraph(agentState)` with conditional edges routing prompts across all 6 specialized agents in `graph/graph.js`.
-- [x] **Agent Scaffolding**: Modular directory structure housing individual agent handlers:
-  - 💬 **Chat Agent**: Conversational exchanges and dialogue management.
-  - 💻 **Coding Agent**: Code writing, reviewing, and explanation workflows.
-  - 🎨 **Image Gen Agent**: Prompt formatting and image generation pipelines.
-  - 📄 **PDF Agent**: Document parsing, context retrieval, and question-answering.
-  - 📊 **PPT Agent**: Presentation outlining and slide data structuring.
-  - 🔍 **Search Agent**: Web search routing and retrieval-augmented context.
+- [x] **Multi-LLM Provider Engine (`config/llmModels.js`)**: Dynamic provider factory (`getModel`) supplying:
+  - **Groq (`openai/gpt-oss-120b`)**: High-speed inference for semantic routing, general conversation, and research synthesis.
+  - **Google Gemini (`gemini-2.5-flash`)**: High-capability multimodal model dedicated to code synthesis, debugging, and review.
+- [x] **LLM Intent-Based Router (`graph/router.js`)**: Natural-language routing prompt that analyzes query semantics and directs tasks to the optimal domain agent with fallback safeguards.
+- [x] **Agent State Management (`graph/state.js`)**: `agentState` root annotation maintaining conversational state across graph execution (`prompt`, `aiResponse`, `agent`, `conversationId`).
+- [x] **Compiled StateGraph Pipeline (`graph/graph.js`)**:
+  - Full StateGraph lifecycle configuration with conditional edges branching from the `router`.
+  - Sequential agent chaining (`search` $\rightarrow$ `chat`) to synthesize search findings into clean conversational summaries.
+  - Clean edge termination routing completed responses to `__end__`.
+  - Compiled and exported graph pipeline via `workflow.compile()`.
+- [x] **Agent Invocation Controller & API (`controllers/agent.contoller.js` & `routes/agent.route.js`)**:
+  - `POST /chat` endpoint mounted on the agent service.
+  - Inter-service persistence: automatically posts the incoming user prompt to `CHAT_SERVICE/save-message` before invoking the graph.
+  - Invokes `graph.invoke({ prompt, conversationId })` and returns the generated `aiResponse`.
+- [x] **Chat Agent Implementation (`agents/chat.agent.js`)**: Full dialogue agent with system persona instructions and prompt invocation against Groq.
+- [ ] **Additional Domain Agents**: *Scaffolded & in progress* (`coding.agent.js`, `imageGen.agent.js`, `pdf.agent.js`, `ppt.agent.js`, `search.agent.js`).
 
 ### 5. Frontend Client (`/frontend`)
 - [x] **Stack**: React 19, Vite, Tailwind CSS v4.
@@ -149,9 +181,11 @@ nexus_node/
 │   │   │   ├── models/            # Conversation & Message schemas
 │   │   │   └── routes/
 │   │   └── agent/                 # LangGraph multi-agent orchestration
-│   │       ├── agents/            # Individual specialized agents (chat, code, image, etc.)
-│   │       ├── config/
-│   │       ├── graph/             # Dynamic router & LangGraph execution
+│   │       ├── agents/            # Specialized agents (chat, coding, image, pdf, ppt, search)
+│   │       ├── config/            # Database & Multi-LLM setup (Groq, Google Gemini)
+│   │       ├── controllers/       # Chat synchronization & graph invocation
+│   │       ├── graph/             # Dynamic router, state schema & compiled StateGraph
+│   │       ├── routes/            # Agent service endpoints (/chat)
 │   │       └── index.js
 │   └── shared/
 │       └── redis/                 # Shared ioredis client singleton
@@ -173,6 +207,7 @@ nexus_node/
 | :--- | :--- | :--- |
 | **API Gateway** | Express 5, `express-http-proxy` | Ingress traffic routing, centralized auth guard & header mutation |
 | **Agent Framework** | `@langchain/langgraph`, `@langchain/core` | State-driven multi-agent graph orchestration |
+| **LLM Providers** | `@langchain/groq`, `@langchain/google-genai` | Multi-model integration (Groq `gpt-oss-120b` & Google Gemini `2.5-flash`) |
 | **Cache & Sessions** | Redis, `ioredis` | Fast key-value session storage with automatic TTL |
 | **Database** | MongoDB, Mongoose | Document database for users, conversation threads, and message logs |
 | **Auth** | Firebase Auth (Client & Admin SDK) | Google identity provider verification and account synchronization |
@@ -229,7 +264,9 @@ Open `http://localhost:5173` in your browser to access the application workspace
 ## 🗺️ Roadmap & Future Architecture
 
 - [x] **LangGraph StateGraph & Routing**: Conditional edge routing architecture in `graph/graph.js` and state schema in `graph/state.js`.
-- [ ] **Agent Execution & Model Providers**: Wire LLM invocation into individual agent nodes and implement classification logic in `router.js`.
+- [x] **Multi-LLM Integration**: Dynamic provider engine in `config/llmModels.js` linking Groq (`gpt-oss-120b`) and Gemini (`gemini-2.5-flash`).
+- [x] **Chat Agent & Conversation Persistence**: Automated inter-service message logging and live chat agent responses.
+- [ ] **Specialized Agents Execution**: Implement full execution pipelines for `coding.agent.js`, `imageGen.agent.js`, `pdf.agent.js`, `ppt.agent.js`, and `search.agent.js`.
 - [ ] **Streaming Responses (SSE / WebSockets)**: Enable token-by-token streaming from individual agent models back to the client interface.
 - [ ] **Multi-Agent Memory**: Implement LangGraph checkpointers backed by Redis/MongoDB for cross-turn contextual memory.
 - [ ] **Document & Vector Ingestion**: RAG pipeline for the `pdf.agent.js` and `search.agent.js` using vector embeddings.

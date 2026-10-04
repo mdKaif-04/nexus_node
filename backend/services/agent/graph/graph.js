@@ -46,3 +46,12 @@ switch (state.agent) {
     ppt:"ppt",
     imageGen:"imageGen"
 })
+
+workflow.addEdge("search","chat")
+workflow.addEdge("chat","__end__")
+workflow.addEdge("coding","__end__")
+workflow.addEdge("pdf","__end__")
+workflow.addEdge("ppt","__end__")
+workflow.addEdge("imageGen","__end__")
+
+export const graph=workflow.compile()
