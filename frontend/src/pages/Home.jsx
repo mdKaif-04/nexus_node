@@ -10,7 +10,7 @@ import ChatArea from '../components/ChatArea';
 import Artifact from '../components/Artifact';
 
 const Home = () => {
-  const {userData}=useSelector(state=>state.user)
+  const {userData}=useSelector(state=>state?.user)
   const dispatch=useDispatch()
   console.log(userData)
     
