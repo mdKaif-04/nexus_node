@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react'
-import { Coins, LogOut, MessageSquare, PanelLeftIcon, PenSquare, Plus, User } from 'lucide-react'
+import { Coins, LogOut, MessageSquare, PanelLeftIcon, PanelRight, PenSquare, Plus, User } from 'lucide-react'
 import { createConversation, getConversations } from '../features/conversations'
 import { useDispatch, useSelector } from 'react-redux'
 import { addConversation, setConversation, setSelectedConv } from '../redux/conversationSlice'
@@ -28,6 +28,44 @@ function Sidebar() {
         const data = await createConversation()
         dispatch(addConversation(data))
     }
+
+    if (collapsed) {
+        return (
+            <div className='hidden lg:flex flex-col items-center w-14 h-screen bg-[#0d0f14] border-r 
+            border-white/6 py-4 gap-1 shrink-0 '>
+                <button className='flex items-center justify-center w-9 h-9 rounded-xl text-slate-500 
+                hover:text-slate-200 hover:bg-white/5 transition-colors duration-150 bg-transparent 
+                border-none cursor-pointer mb-1' onClick={() => setCollapsed(false)}>
+                    <PanelRight />
+                </button>
+
+                <button title='New Chat' className='flex items-center justify-center w-9 h-9 rounded-xl text-slate-500 
+                hover:text-slate-200 hover:bg-white/5 transition-colors duration-150 bg-transparent 
+                border-none cursor-pointer mb-1' onClick={handleCreateConv}>
+                    <Plus size={17} />
+                </button>
+                <div className='relative shrink-0 mt-auto'>
+                    {
+                        (userData?.avatar && !imageError)
+                            ?
+                            <img className='w-9 h-9 rounded-[10px] object-cover border-2 border-indigo-500/25'
+                                src={userData?.avatar}
+                                alt={userData?.name || 'User avatar'}
+                                referrerPolicy='no-referrer'
+                                onError={() => setImageError(true)} />
+                            :
+                            <div className='w-9 h-9 rounded-[10px] bg-white/6 flex items-center justify-center border-2 border-indigo-500/25'>
+                                <User size={16} className='text-slate-400' />
+                            </div>
+                    }
+
+                </div>
+
+            </div>
+        )
+
+    }
+
     return (
         <div className='fixed  lg:static inset-y-0 left-0 z-50 w-67.5 h-screen shrink-0 bg-[#0d0f14] border-r 
      border-white/6'>
@@ -108,23 +146,24 @@ function Sidebar() {
 
                         </div>
                         <div className='flex-1 min-w-0'>
-                           <p className='text-sm font-semibold text-slate-100 truncate'>
-                            {userData?.name || "User"}</p>
-                           <p className='text-xs text-slate-600 mt-px'>{"Free Plan"}</p>
+                            <p className='text-sm font-semibold text-slate-100 truncate'>
+                                {userData?.name || "User"}</p>
+                            <p className='text-xs text-slate-600 mt-px'>{"Free Plan"}</p>
                         </div>
                         <div className='flex gap-1'>
                             <button className='flex items-center justify-center w-7 h-7 rounded-lg border-none
                              bg-transparent text-yellow-600 cursor-pointer hover:bg-white/8 hover:text-slate-400
                              transition-all duration-150'>
-                                <Coins size={16}/>
+                                <Coins size={16} />
                             </button>
                             <button className='flex items-center justify-center w-7 h-7 rounded-lg border-none
                              bg-transparent text-slate-600 cursor-pointer hover:bg-white/8 hover:text-slate-400
                              transition-all duration-150'
-                             onClick={()=>{logOut();
-                                dispatch(setUserData(null))
-                             }}>
-                                <LogOut size={16}/>
+                                onClick={() => {
+                                    logOut();
+                                    dispatch(setUserData(null))
+                                }}>
+                                <LogOut size={16} />
                             </button>
 
                         </div>
@@ -133,7 +172,8 @@ function Sidebar() {
                     : <button className='w-full flex items-center justify-center gap-2 text-sm font-medium
                     text-slate-200 bg-white/5 border border-white/8 rounded-xl py-3 cursor-pointer 
                     hover:bg-white/8 transition-colors duration-150 '>
-                        Login</button>}</div>
+                        Login</button>}
+                </div>
 
             </div>
         </div>

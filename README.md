@@ -28,8 +28,11 @@ The system is decoupled into an **API Gateway**, independent **Domain Microservi
 
 ```mermaid
 flowchart TD
-    subgraph Client [Client Layer]
-        UI["React 19 + Vite Frontend"]
+    subgraph Client [Client Layer - React 19 & Tailwind v4]
+        Sidebar["Sidebar<br/>(Threads, Collapsible, Profile)"]
+        Nav["Nav Header<br/>(Thread Title & Metadata)"]
+        ChatArea["ChatArea<br/>(Nav, MessageList, ChatInput)"]
+        ArtifactView["Artifact Viewer<br/>(Agent Output Panel)"]
     end
 
     subgraph Gateway [API Gateway]
@@ -71,7 +74,8 @@ flowchart TD
         GraphEnd(["Graph End"])
     end
 
-    UI -->|REST with Cookies| GW
+    Sidebar -->|Auth & Thread Sync| GW
+    ChatArea -->|Send Prompts & Fetch Messages| GW
     GW -->|Session Check| Redis
     GW -->|/api/auth| AuthService
     GW -->|/api/chat| AuthMiddleware
@@ -119,6 +123,7 @@ Here is an exact, deep-dive summary of what is built and operating today versus 
 - [x] **Session Guard Middleware (`protect`)**: Verifies HTTP-only session cookies against Redis in real time before admitting requests to protected routes.
 - [x] **Header Injection (`proxyWithHeader`)**: Extracts user credentials from Redis and automatically injects metadata (`x-user-id`) into downstream service requests.
 - [x] **CORS & Cookie Parser**: Centralized cookie management and origin validation.
+- [x] **Request Logging (`morgan`)**: Configured with `'dev'` format for live endpoint traffic observability and diagnostics.
 
 ### 2. Auth Service (`/backend/services/auth`)
 - [x] **Firebase Authentication Integration**: Validates Google OAuth ID tokens on the server using `firebase-admin`.
@@ -127,9 +132,9 @@ Here is an exact, deep-dive summary of what is built and operating today versus 
 - [x] **Logout Invalidation**: Destroys session keys in Redis and clears browser cookies.
 
 ### 3. Chat Service (`/backend/services/chat`)
-- [x] **Thread Management**: Endpoints to create, update (rename titles), and query user conversation lists.
-- [x] **Message Persistence**: Schema for role-based (`user`/`assistant`) message logs mapped to `conversationId`.
-- [x] **Chronological Retrieval**: Fetching message history sorted by creation timestamps.
+- [x] **Thread Management**: Endpoints to create (`/create-conversation`), update titles (`/update-conversation`), and query conversation lists (`/get-conversation`).
+- [x] **Message Persistence**: Schema for role-based (`user`/`assistant`) message logs mapped to `conversationId` (`/save-message`).
+- [x] **Message Retrieval**: Route `/get-messages/:conversationId` providing complete conversation message history sorted by creation timestamps.
 
 ### 4. Agent Service (`/backend/services/agent`)
 - [x] **Multi-LLM Provider Engine (`config/llmModels.js`)**: Dynamic provider factory (`getModel`) supplying:
@@ -150,11 +155,27 @@ Here is an exact, deep-dive summary of what is built and operating today versus 
 - [ ] **Additional Domain Agents**: *Scaffolded & in progress* (`coding.agent.js`, `imageGen.agent.js`, `pdf.agent.js`, `ppt.agent.js`, `search.agent.js`).
 
 ### 5. Frontend Client (`/frontend`)
-- [x] **Stack**: React 19, Vite, Tailwind CSS v4.
+- [x] **Tri-Panel Workspace Layout (`pages/Home.jsx`)**: Responsive 3-column architecture featuring the collapsible `Sidebar`, primary `ChatArea`, and output `Artifact` viewer.
+- [x] **Interactive & Collapsible Sidebar (`components/Sidebar.jsx`)**:
+  - Real-time conversation thread fetching via `/api/chat/get-conversation`.
+  - Active conversation thread selection with highlight styling.
+  - "New Chat" creation triggering `/api/chat/create-conversation` with instant Redux state updates.
+  - Expand/collapse toggle controls (`PanelLeftIcon` / `PanelRight`) with minimal collapsed view, shortcut actions, and bottom-anchored avatar.
+- [x] **Chat Viewport Architecture (`components/ChatArea.jsx`)**:
+  - `Nav.jsx`: Dynamic header with active conversation title (`selectedConv?.title || 'New Chat'`) and thread iconography.
+  - `MessageList.jsx`: Message thread viewport container.
+  - `ChatInput.jsx`: Conversation prompt input interface.
+  - Auto-fetching messages via `features/getMessages.js` whenever `selectedConv` changes.
+- [x] **User Profile & Session Controls**:
+  - Google avatar rendering with graceful fallback icon on load error.
+  - Subscription plan indicator ("Free Plan") and credit/coin balance shortcut.
+  - Integrated logout button triggering backend `/api/auth/logout` and clearing client credentials.
+- [x] **Redux Toolkit Global Store**:
+  - `userSlice.js`: Authenticated user state and profile details.
+  - `conversationSlice.js`: Conversation collection and active thread pointer (`selectedConv`).
+  - `messageSlice.js`: Conversation message collection and updater (`setMessages`).
 - [x] **Authentication Flow**: Firebase Google popup sign-in integrated with backend `/api/auth/login`.
-- [x] **State Management**: Redux Toolkit store (`userSlice`) tracking authenticated user state.
-- [x] **Glassmorphic Dark UI**: Clean modal overlay with responsive design.
-- [ ] **Chat Interface & Agent Viewports**: *In progress* (sidebar threads, streaming responses, agent selector).
+- [ ] **Interactive Message Stream**: *In progress* (message bubble styling, markdown rendering, LLM dispatch, token streaming).
 
 ---
 
@@ -191,9 +212,10 @@ nexus_node/
 │       └── redis/                 # Shared ioredis client singleton
 ├── frontend/                      # Vite + React 19 Client
 │   ├── src/
-│   │   ├── features/              # Feature modules & user status
-│   │   ├── pages/                 # Application views (Home, Chat, etc.)
-│   │   ├── redux/                 # Redux Toolkit slices and store configuration
+│   │   ├── components/            # Workspace views (Sidebar, ChatArea, Nav, MessageList, ChatInput, Artifact)
+│   │   ├── features/              # Async actions (conversations, getMessages, logOut, getCurrentUser)
+│   │   ├── pages/                 # Application views (Home)
+│   │   ├── redux/                 # Redux slices (userSlice, conversationSlice, messageSlice) & store
 │   │   └── utils/                 # Axios client instance & Firebase SDK init
 │   └── package.json
 └── README.md
@@ -205,7 +227,7 @@ nexus_node/
 
 | Domain | Technology | Description |
 | :--- | :--- | :--- |
-| **API Gateway** | Express 5, `express-http-proxy` | Ingress traffic routing, centralized auth guard & header mutation |
+| **API Gateway** | Express 5, `express-http-proxy`, `morgan` | Ingress traffic routing, centralized auth guard, request logging & header mutation |
 | **Agent Framework** | `@langchain/langgraph`, `@langchain/core` | State-driven multi-agent graph orchestration |
 | **LLM Providers** | `@langchain/groq`, `@langchain/google-genai` | Multi-model integration (Groq `gpt-oss-120b` & Google Gemini `2.5-flash`) |
 | **Cache & Sessions** | Redis, `ioredis` | Fast key-value session storage with automatic TTL |
@@ -213,6 +235,7 @@ nexus_node/
 | **Auth** | Firebase Auth (Client & Admin SDK) | Google identity provider verification and account synchronization |
 | **Frontend** | React 19, Vite, Tailwind CSS v4 | High-performance reactive UI with modern styles |
 | **State Management**| Redux Toolkit (`@reduxjs/toolkit`) | Predictable global client state container |
+| **UI & Icons** | `lucide-react`, `react-icons` | Clean icon sets and responsive UI components |
 | **Containers** | Docker Compose | Local Redis instance management |
 
 ---
@@ -266,11 +289,12 @@ Open `http://localhost:5173` in your browser to access the application workspace
 - [x] **LangGraph StateGraph & Routing**: Conditional edge routing architecture in `graph/graph.js` and state schema in `graph/state.js`.
 - [x] **Multi-LLM Integration**: Dynamic provider engine in `config/llmModels.js` linking Groq (`gpt-oss-120b`) and Gemini (`gemini-2.5-flash`).
 - [x] **Chat Agent & Conversation Persistence**: Automated inter-service message logging and live chat agent responses.
+- [x] **Frontend Tri-Panel Workspace & Sidebar**: Integrated conversation threads, user profile footer, and session logout.
+- [ ] **Chat Dialogue & Message Stream**: UI components (`Nav`, `MessageList`, `ChatInput`) and Redux store integration (`messageSlice`) scaffolded; active development on bubble styling, input submission, and token streaming in `ChatArea.jsx`.
 - [ ] **Specialized Agents Execution**: Implement full execution pipelines for `coding.agent.js`, `imageGen.agent.js`, `pdf.agent.js`, `ppt.agent.js`, and `search.agent.js`.
-- [ ] **Streaming Responses (SSE / WebSockets)**: Enable token-by-token streaming from individual agent models back to the client interface.
 - [ ] **Multi-Agent Memory**: Implement LangGraph checkpointers backed by Redis/MongoDB for cross-turn contextual memory.
 - [ ] **Document & Vector Ingestion**: RAG pipeline for the `pdf.agent.js` and `search.agent.js` using vector embeddings.
-- [ ] **Rich Frontend Workspace**: Multi-view layout displaying agent thought processes, tool calls, and rendered output (markdown, syntax-highlighted code, image canvas).
+- [ ] **Artifact Viewer Integration**: Live rendering of code snippets, diagrams, and media in `Artifact.jsx`.
 
 ---
 
